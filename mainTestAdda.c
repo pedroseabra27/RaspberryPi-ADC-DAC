@@ -23,82 +23,86 @@
  */
 int main(void)
 {
+	// Force stdout line buffered for immediate feedback
+	setvbuf(stdout, NULL, _IOLBF, 0);
 	printf("Starting Test ADDA\r\n");
 
 	int initSpi = spi_init();
-        if (initSpi != 1)
+	if (initSpi != 1)
 	{
 		printf("SPI init failed with code %d\r\n", initSpi);
 		return -55;
 	}
 	printf("SPI initialized\r\n");
 
-	//Prepare an array with the 8 single ended inputs to read [0,1,2,3,4,5,6,7]
 	int NbChannels = 8;
 	int MainLoop = 0;
 	int RetCode = 0;
 	uint8_t *Channels = malloc(NbChannels * sizeof(uint8_t));
+	if (!Channels)
+	{
+		printf("Malloc failed for Channels\r\n");
+		return -56;
+	}
 	uint8_t Ch;
 	for (Ch = 0; Ch < NbChannels; Ch++)
 	{
-		*(Channels + Ch) = Ch;
+		Channels[Ch] = Ch;
 	}
+	printf("Channels array ready\r\n");
 
-	//Write 0 to ouputs A and B
-	DAC8552_Write(channel_A, Voltage_Convert(5.0, 0));
-	DAC8552_Write(channel_B, Voltage_Convert(5.0, 0));
-
-	while (1 == 1)
+	while (1)
 	{
-
-		printf("ADC_DAC_Init\r\n");
+		printf("[Loop %d] Calling ADC_DAC_Init...\r\n", MainLoop);
 		int Id = 0;
-		int Init = ADC_DAC_Init(&Id, ADS1256_GAIN_1, ADS1256_100SPS);
-		if (Init != 0)
+		int InitCode = ADC_DAC_Init(&Id, ADS1256_GAIN_1, ADS1256_100SPS);
+		if (InitCode != 0)
 		{
+			printf("ADC_DAC_Init failed, code=%d\r\n", InitCode);
 			RetCode = -1;
 			break;
 		}
-		printf("init done !\r\n");
-		int Loop;
-		for (Loop = 0; Loop < 100; Loop++)
-		{
-			int32_t *AdcValues = NULL;
-			ADS1256_ReadAdcValues(&Channels, NbChannels, SINGLE_ENDED_INPUTS_8, &AdcValues);
+		printf("ADC_DAC_Init ok, chip ID=%d\r\n", Id);
 
-			double *volt = ADS1256_AdcArrayToMicroVolts(AdcValues, NbChannels, 1.0 / 1000000.0);
-
-			printf("0 : %f V   1 : %f V   2 : %f V   3 : %f V   4 : %f V   5 : %f V   6 : %f V   7 : %f V \r\n",
-				   volt[0], volt[1], volt[2], volt[3], volt[4], volt[5], volt[6], volt[7]);
-
-			DAC8552_Write(channel_A, Voltage_Convert(5.0, volt[0]));
-
-			free(AdcValues);
-			free(volt);
-
-			bsp_DelayUS(1000);
-		}
-
-		//Write 0 to ouputs A and B
+		// Zero DAC outputs AFTER init (CS lines configured)
 		DAC8552_Write(channel_A, Voltage_Convert(5.0, 0));
 		DAC8552_Write(channel_B, Voltage_Convert(5.0, 0));
 
-		printf("ADC_DAC_Close\r\n");
+		int Loop;
+		for (Loop = 0; Loop < 10; Loop++)
+		{
+			int32_t *AdcValues = NULL;
+			int rv = ADS1256_ReadAdcValues(&Channels, NbChannels, SINGLE_ENDED_INPUTS_8, &AdcValues);
+			if (rv != 0)
+			{
+				printf("ADS1256_ReadAdcValues failed (%d)\r\n", rv);
+				RetCode = -3;
+				break;
+			}
+			double *volt = ADS1256_AdcArrayToMicroVolts(AdcValues, NbChannels, 1.0 / 1000000.0);
+			printf("Sample %d: 0:%f 1:%f 2:%f 3:%f 4:%f 5:%f 6:%f 7:%f V\r\n",
+				   Loop, volt[0], volt[1], volt[2], volt[3], volt[4], volt[5], volt[6], volt[7]);
+			DAC8552_Write(channel_A, Voltage_Convert(5.0, volt[0]));
+			free(AdcValues);
+			free(volt);
+			bsp_DelayUS(1000);
+		}
+
+		printf("Closing ADC/DAC...\r\n");
 		int CloseCode = ADC_DAC_Close();
 		if (CloseCode != 0)
 		{
+			printf("ADC_DAC_Close failed (%d)\r\n", CloseCode);
 			RetCode = -2;
 			break;
 		}
 
 		MainLoop++;
-
-		//This loop proves that you can close and re-init pacefully the librairie. Prove it several times (e.g. 3) and then finish the code.
-		if (MainLoop >= 3)
+		if (MainLoop >= 1) // only one loop for initial debug
 			break;
 	}
 
 	printf("Test ADDA finished with returned code %d\r\n", RetCode);
-
+	free(Channels);
 	return RetCode;
 }
