@@ -83,7 +83,9 @@ int WaitCondition(bool (*f)(void))
 	{
 		if ((*f)())
 			return 0;
-
+		if (i % 100000 == 0) {
+			printf("[DBG] WaitCondition waiting i=%d\r\n", i);
+		}
 		bsp_DelayUS(1);
 	}
 
@@ -111,12 +113,14 @@ void ADS1256_Send8Bit(uint8_t _data)
  */
 int ADS1256_ConfigureADC(ADS1256_GAIN_E _gain, ADS1256_DRATE_E _drate)
 {
+	printf("[DBG] ADS1256_ConfigureADC start gain=%d drate=%d\r\n", (int)_gain, (int)_drate);
 	int w = ADS1256_WaitDRDY_LOW();
 	if (w != 0)
 	{
 		printf("In ADS1256_ConfigureADC, ADS1256_WaitDRDY_LOW returned %d\r\n", w);
 		return -1;
 	}
+	printf("[DBG] DRDY low, writing config regs\r\n");
 
 	{
 		uint8_t buf[4]; /* Storage ads1256 register configuration parameters */
@@ -515,6 +519,7 @@ uint8_t ADS1256_RemapChannelIndex(uint8_t ch)
  */
 int ADC_DAC_Init(int *id, ADS1256_GAIN_E aGain, ADS1256_DRATE_E aDrate)
 {
+	printf("[DBG] ADC_DAC_Init begin\r\n");
 	int initBcm = spi_init();
 	if (initBcm != 1)
 	{
@@ -523,6 +528,7 @@ int ADC_DAC_Init(int *id, ADS1256_GAIN_E aGain, ADS1256_DRATE_E aDrate)
 	}
 
 	int spiBegin = spi_begin();
+	printf("[DBG] spi_begin returned %d\r\n", spiBegin);
 
 	if (spiBegin != 1)
 	{
@@ -531,6 +537,7 @@ int ADC_DAC_Init(int *id, ADS1256_GAIN_E aGain, ADS1256_DRATE_E aDrate)
 	}
 
 	int spiPrepare = spi_init_adc_dac_board();
+	printf("[DBG] spi_init_adc_dac_board returned %d\r\n", spiPrepare);
 
 	if (spiPrepare != 1)
 	{
@@ -539,6 +546,7 @@ int ADC_DAC_Init(int *id, ADS1256_GAIN_E aGain, ADS1256_DRATE_E aDrate)
 	}	
 
 	*id = ADS1256_ReadChipID();
+	printf("[DBG] ReadChipID=%d\r\n", *id);
 
 	if (*id != 3)
 	{
@@ -547,6 +555,7 @@ int ADC_DAC_Init(int *id, ADS1256_GAIN_E aGain, ADS1256_DRATE_E aDrate)
 	}
 
 	ADS1256_ConfigureADC(aGain, aDrate);
+	printf("[DBG] ADS1256_ConfigureADC done\r\n");
 
 	return 0;
 }
